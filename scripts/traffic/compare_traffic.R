@@ -1,20 +1,26 @@
-##  use this helper to be clear in debugging validation of scores
+##  use these helpers to be clear in debugging validation of scores
 ## and check if this is the right formula
 
-tscore2 = function(bgfips, bg_pop_acs, 
-									 blockfips, blockwt, 
-									 aadt, 
-									 dist, 
-									 dist_min=0.1, 
-									 dist_past_which_just_1_nearest=500, 
-									 dist_max=10000) {
+##################################################### #
+
+# This tries to calculate a score for each blockgroup,
+# given one row per BLOCK-TO-ROADSEGMENT pair
+
+tscore_bg <- function(bgfips, 
+											bg_pop_acs, 
+											blockfips, blockwt, 
+											aadt, 
+											dist, 
+											dist_min=0.1, 
+											dist_past_which_just_1_nearest=500, 
+											dist_max=10000) {
 	
 	units(dist) <- "m"
 	units(dist_min) <- "m"
 	units(dist_past_which_just_1_nearest) <- "m"
 	units(dist_max) <- "m"
 	
-	# input has 1 row per block-segment pair 
+	# input has 1 row per BLOCK-TO-ROAD segment pair 
 	
 	# for every distance < dist_min, set dist to dist_min
 	# for every distance > dist_max, drop those segments for that block
@@ -23,20 +29,34 @@ tscore2 = function(bgfips, bg_pop_acs,
 	# for each block, block score = sum of (blockwt * bgpop * aadt/distance) by block
 	# for each bg, bg score = sum  block scores by bg
 	
-	dist[dist < min_dist] <- min_dist
-	dist[dist > dist_max] <- NA  # drop these segments using sum(   , na.rm=T)
+	# dist[dist < min_dist] <- min_dist
+	# dist[dist > dist_max] <- NA  # drop these segments using sum(   , na.rm=T)
 	
-	stop('to be continued')
-	
-	# pdx[ , blockscore := sum(aadt_over_dist), by = "GEOID20"] # for each block, sum over all road segments near it
+  dt = data.table::data.table(bgfips = bgfips,
+  														bg_pop_acs = bg_pop_acs, 
+  														blockfips = blockfips,
+  														blockwt = blockwt, 
+  														aadt = aadt, 
+  														dist = dist)
+  
+	scores_by_block = dt[, .(bgfips = bgfips,
+													 blockscore = tscore_1block(aadt = aadt, dist=dist, 
+																		 dist_min = dist_min, dist_max = dist_max)
+													 ),
+											 by = "blockfips"]
+		
+		# pdx[ , blockscore := sum(aadt_over_dist), by = "GEOID20"] # for each block, sum over all road segments near it
 }
 ##################################################### #
 
-tscore <- function(aadt, pop, popwt, 
-									 dist, 
-									 dist_min=0.1, 
-									 dist_past_which_just_1_nearest=500, 
-									 dist_max=10000) {
+# This tries to calculate a score for ONE BLOCK ONLY
+
+tscore_1block <- function(
+		aadt,
+		dist, 
+		dist_min=0.1, 
+		dist_past_which_just_1_nearest=500, 
+		dist_max=10000) {
 	
 	# parameterized like this (without fips) there is no way to use only the 
 	# single road nearest the BLOCK (bg?) where none are within 500 meters of the BLOCK (bg?)
@@ -50,8 +70,9 @@ tscore <- function(aadt, pop, popwt,
 	aadt[dist > dist_past_which_just_1_nearest] <- 0 # placeholder to exclude these for now
 	aadt[dist > dist_max] <- 0
 	
-	# sum(pop * popwt * aadt / dist, na.rm = TRUE)
-	sum( aadt / dist, na.rm = TRUE)
+	# Sum over ALL SEGEMENTS NEAR THIS 1 BLOCK 
+	scores_by_block <- 
+		sum( aadt / dist, na.rm = TRUE )
 }
 ##################################################### #
 
